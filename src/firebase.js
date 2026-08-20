@@ -123,20 +123,30 @@ export function onAuthChange(callback) {
 }
 
 /**
- * Push user data to Firestore and Realtime Database with robust error handling
+ * Clean data to guarantee zero `undefined` values (which Firestore strictly rejects)
  */
-export async function pushUserDataToFirebase(userId, data) {
-  if (!userId) return false;
-  
-  const payload = {
+function sanitizeForCloud(data) {
+  return JSON.parse(JSON.stringify({
     tasks: data.tasks || [],
     habits: data.habits || [],
     settings: data.settings || {},
     streakData: data.streakData || {},
     lastUpdated: Date.now(),
-  };
+  }));
+}
 
-  // 1. Update local cache
+/**
+ * Push user data to Firestore and Realtime Database with sanitized payloads
+ */
+export async function pushUserDataToFirebase(userId, data) {
+  if (!userId) {
+    console.warn('Cannot push to cloud: userId is missing');
+    return false;
+  }
+  
+  const payload = sanitizeForCloud(data);
+
+  // 1. Update local cache immediately
   try {
     localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(payload));
   } catch (e) {
@@ -150,25 +160,27 @@ export async function pushUserDataToFirebase(userId, data) {
   try {
     const userDoc = doc(firestore, 'users', userId);
     await setDoc(userDoc, payload, { merge: true });
+    console.log('✅ Firestore sync saved successfully for user:', userId);
     firestoreSuccess = true;
   } catch (err) {
-    console.warn('Firestore sync notice:', err);
+    console.error('❌ Firestore sync write error:', err);
   }
 
   // 3. Push to Realtime Database
   try {
     const userRef = ref(database, `users/${userId}`);
     await set(userRef, payload);
+    console.log('✅ RTDB sync saved successfully for user:', userId);
     rtdbSuccess = true;
   } catch (err) {
-    console.warn('RTDB sync notice:', err);
+    console.warn('RTDB sync write notice:', err);
   }
 
   return firestoreSuccess || rtdbSuccess;
 }
 
 /**
- * Fetch initial user cloud data (Tries Firestore, then RTDB, then Local Cache)
+ * Fetch initial user cloud data (Tries Firestore first, then RTDB, then Local Cache)
  */
 export async function getUserDataFromFirebase(userId) {
   if (!userId) return null;
@@ -179,11 +191,14 @@ export async function getUserDataFromFirebase(userId) {
     const docSnap = await getDoc(userDoc);
     if (docSnap.exists()) {
       const data = docSnap.data();
+      console.log('✅ Loaded data from Firestore for user:', userId, data);
       localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(data));
       return data;
+    } else {
+      console.log('ℹ️ No Firestore document exists yet for user:', userId);
     }
   } catch (e) {
-    console.warn('Firestore fetch notice, checking RTDB fallback:', e);
+    console.error('❌ Firestore fetch error:', e);
   }
 
   // 2. Try Realtime Database
@@ -192,11 +207,12 @@ export async function getUserDataFromFirebase(userId) {
     const snapshot = await get(userRef);
     if (snapshot.exists()) {
       const data = snapshot.val();
+      console.log('✅ Loaded data from RTDB for user:', userId, data);
       localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(data));
       return data;
     }
   } catch (e) {
-    console.warn('RTDB fetch notice, checking local cache:', e);
+    console.warn('RTDB fetch notice:', e);
   }
 
   // 3. Try Local User Cache
@@ -227,10 +243,11 @@ export function subscribeToUserRoom(userId, onUpdate) {
     unsubFirestore = onSnapshot(userDoc, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        console.log('🔄 Realtime update received from Firestore for user:', userId);
         onUpdate(data);
       }
     }, (err) => {
-      console.warn('Firestore subscription notice:', err);
+      console.error('Firestore realtime listener error:', err);
     });
   } catch (e) {
     console.warn('Firestore subscription init error:', e);
@@ -242,10 +259,11 @@ export function subscribeToUserRoom(userId, onUpdate) {
     unsubRtdb = onValue(userRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
+        console.log('🔄 Realtime update received from RTDB for user:', userId);
         onUpdate(data);
       }
     }, (err) => {
-      console.warn('RTDB subscription notice:', err);
+      console.warn('RTDB realtime listener notice:', err);
     });
   } catch (e) {
     console.warn('RTDB subscription init error:', e);

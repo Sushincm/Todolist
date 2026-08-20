@@ -28,7 +28,8 @@ import {
   registerWithEmail,
   logoutFirebase,
   onAuthChange,
-  checkRedirectResult
+  checkRedirectResult,
+  pushUserDataToFirebase
 } from './firebase';
 import { pushUserSyncData, startGoogleRealtimeSync, stopGoogleSync, fetchUserCloudData } from './utils/sync';
 
@@ -120,6 +121,8 @@ export default function App() {
         } else if (tasks.length === 0) {
           const defaultTasks = getStoredTasks();
           setTasks(defaultTasks);
+          // Initial push
+          pushUserDataToFirebase(user.uid, { tasks: defaultTasks, habits, settings, streakData });
         }
 
         if (cloudData.habits && Array.isArray(cloudData.habits)) {
@@ -133,14 +136,12 @@ export default function App() {
           setStreakData(cloudData.streakData);
         }
       } else {
-        // First-time user on this account: seed initial tasks
-        if (tasks.length === 0) {
-          const initialTasks = getStoredTasks();
-          setTasks(initialTasks);
-        }
-        if (habits.length === 0) {
-          setHabits(getStoredHabits());
-        }
+        // First-time user on this account: seed initial tasks and push to cloud
+        const initialTasks = tasks.length > 0 ? tasks : getStoredTasks();
+        const initialHabits = habits.length > 0 ? habits : getStoredHabits();
+        setTasks(initialTasks);
+        setHabits(initialHabits);
+        await pushUserDataToFirebase(user.uid, { tasks: initialTasks, habits: initialHabits, settings, streakData });
       }
 
       setIsDataLoaded(true);
@@ -270,16 +271,16 @@ export default function App() {
 
   // Auto-push updates to Firebase when user modifies state (only after initial load!)
   useEffect(() => {
-    if (googleUser && isDataLoaded) {
+    if (googleUser?.uid && isDataLoaded) {
       saveTasks(tasks);
-      pushUserSyncData({ tasks, habits, settings, streakData });
+      pushUserDataToFirebase(googleUser.uid, { tasks, habits, settings, streakData });
     }
   }, [tasks, isDataLoaded]);
 
   useEffect(() => {
-    if (googleUser && isDataLoaded) {
+    if (googleUser?.uid && isDataLoaded) {
       saveHabits(habits);
-      pushUserSyncData({ tasks, habits, settings, streakData });
+      pushUserDataToFirebase(googleUser.uid, { tasks, habits, settings, streakData });
     }
   }, [habits, isDataLoaded]);
 
@@ -302,59 +303,75 @@ export default function App() {
 
   // Task Handlers
   const handleAddTask = (newTask) => {
-    setTasks(prev => [newTask, ...prev]);
+    const updatedTasks = [newTask, ...tasks];
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleToggleTask = (taskId) => {
-    setTasks(prev =>
-      prev.map(t => {
-        if (t.id === taskId) {
-          const nextCompleted = !t.completed;
-          if (nextCompleted) {
-            const updatedStreak = updateStreakOnTaskComplete();
-            setStreakData(updatedStreak);
-          }
-          return { ...t, completed: nextCompleted };
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        const nextCompleted = !t.completed;
+        if (nextCompleted) {
+          const updatedStreak = updateStreakOnTaskComplete();
+          setStreakData(updatedStreak);
         }
-        return t;
-      })
-    );
+        return { ...t, completed: nextCompleted };
+      }
+      return t;
+    });
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleToggleSubtask = (taskId, subtaskId) => {
-    setTasks(prev =>
-      prev.map(t => {
-        if (t.id === taskId) {
-          const updatedSubtasks = (t.subtasks || []).map(s =>
-            s.id === subtaskId ? { ...s, completed: !s.completed } : s
-          );
-          return { ...t, subtasks: updatedSubtasks };
-        }
-        return t;
-      })
-    );
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        const updatedSubtasks = (t.subtasks || []).map(s =>
+          s.id === subtaskId ? { ...s, completed: !s.completed } : s
+        );
+        return { ...t, subtasks: updatedSubtasks };
+      }
+      return t;
+    });
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleDeleteTask = (taskId) => {
-    setTasks(prev => prev.filter(t => t.id !== taskId));
+    const updatedTasks = tasks.filter(t => t.id !== taskId);
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleDecomposeTask = (taskId) => {
-    setTasks(prev =>
-      prev.map(t => {
-        if (t.id === taskId) {
-          const generatedSteps = decomposeTask(t.title, t.category);
-          return { ...t, subtasks: generatedSteps };
-        }
-        return t;
-      })
-    );
+    const updatedTasks = tasks.map(t => {
+      if (t.id === taskId) {
+        const generatedSteps = decomposeTask(t.title, t.category);
+        return { ...t, subtasks: generatedSteps };
+      }
+      return t;
+    });
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleUpdateQuadrant = (taskId, newQuadrant) => {
-    setTasks(prev =>
-      prev.map(t => t.id === taskId ? { ...t, matrixQuadrant: newQuadrant } : t)
-    );
+    const updatedTasks = tasks.map(t => t.id === taskId ? { ...t, matrixQuadrant: newQuadrant } : t);
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleStartFocusTask = (task) => {
@@ -363,32 +380,40 @@ export default function App() {
   };
 
   const handleSetFrogTask = (frogTaskId) => {
-    setTasks(prev =>
-      prev.map(t => ({
-        ...t,
-        isFrog: t.id === frogTaskId
-      }))
-    );
+    const updatedTasks = tasks.map(t => ({
+      ...t,
+      isFrog: t.id === frogTaskId
+    }));
+    setTasks(updatedTasks);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks: updatedTasks, habits, settings, streakData });
+    }
   };
 
   const handleToggleHabit = (habitId) => {
-    setHabits(prev =>
-      prev.map(h => {
-        if (h.id === habitId) {
-          const nextVal = !h.completedToday;
-          return {
-            ...h,
-            completedToday: nextVal,
-            streak: nextVal ? h.streak + 1 : Math.max(0, h.streak - 1)
-          };
-        }
-        return h;
-      })
-    );
+    const updatedHabits = habits.map(h => {
+      if (h.id === habitId) {
+        const nextVal = !h.completedToday;
+        return {
+          ...h,
+          completedToday: nextVal,
+          streak: nextVal ? h.streak + 1 : Math.max(0, h.streak - 1)
+        };
+      }
+      return h;
+    });
+    setHabits(updatedHabits);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks, habits: updatedHabits, settings, streakData });
+    }
   };
 
   const handleAddHabit = (newHabit) => {
-    setHabits(prev => [...prev, newHabit]);
+    const updatedHabits = [...habits, newHabit];
+    setHabits(updatedHabits);
+    if (googleUser?.uid) {
+      pushUserDataToFirebase(googleUser.uid, { tasks, habits: updatedHabits, settings, streakData });
+    }
   };
 
   const handleReloadDataFromStorage = () => {

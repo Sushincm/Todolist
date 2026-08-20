@@ -22,15 +22,30 @@ export function getActiveUserId() {
  */
 export async function fetchUserCloudData(userId) {
   if (!userId) return null;
+  activeUserId = userId;
   return getUserDataFromFirebase(userId);
 }
 
 /**
  * Push local state to logged-in Google user room in Firebase
  */
-export async function pushUserSyncData(data) {
-  if (!activeUserId) return false;
-  return pushUserDataToFirebase(activeUserId, data);
+export async function pushUserSyncData(param1, param2) {
+  let uid = activeUserId;
+  let data = param1;
+
+  if (typeof param1 === 'string') {
+    uid = param1;
+    data = param2;
+  } else if (param1?.userId) {
+    uid = param1.userId;
+  }
+
+  if (!uid) {
+    console.warn('pushUserSyncData aborted: activeUserId is null');
+    return false;
+  }
+
+  return pushUserDataToFirebase(uid, data);
 }
 
 /**
