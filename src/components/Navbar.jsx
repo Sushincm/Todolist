@@ -1,5 +1,5 @@
 import React from 'react';
-import { Calendar, LayoutGrid, Timer, Flame, CheckCircle2, BarChart2, Settings, Smartphone, Sun, LogIn, LogOut } from 'lucide-react';
+import { Calendar, LayoutGrid, Timer, Flame, CheckCircle2, BarChart2, Settings, Smartphone, Sun, LogIn, LogOut, User } from 'lucide-react';
 
 export default function Navbar({
   activeTab,
@@ -19,27 +19,29 @@ export default function Navbar({
     day: 'numeric'
   });
 
+  const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'User';
+
   return (
     <>
-      <header class="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 sm:px-6 shadow-xs">
+      <header class="sticky top-0 z-40 w-full bg-white/95 backdrop-blur-md border-b border-slate-200/80 px-3 sm:px-6 py-2.5 shadow-xs">
         <div class="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Left Logo & Date */}
-          <div class="flex items-center space-x-3">
-            <div class="h-9 w-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
-              <CheckCircle2 class="h-5 w-5 text-emerald-400" />
+          {/* Left: Logo & App Title */}
+          <div class="flex items-center space-x-2.5 sm:space-x-3">
+            <div class="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
+              <CheckCircle2 class="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400" />
             </div>
             <div>
-              <h1 class="text-base font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
+              <h1 class="text-sm sm:text-base font-bold tracking-tight text-slate-900 flex items-center gap-1.5">
                 Everyday<span class="text-emerald-600">Focus</span>
                 {user && (
-                  <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Google Realtime Sync Active" />
+                  <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="Cloud Realtime Sync Active" />
                 )}
               </h1>
-              <p class="text-[11px] text-slate-500 font-medium">{todayDateStr}</p>
+              <p class="text-[10px] sm:text-[11px] text-slate-500 font-medium">{todayDateStr}</p>
             </div>
           </div>
 
-          {/* Desktop Nav Links */}
+          {/* Center: Desktop Nav Links */}
           <nav class="hidden lg:flex items-center space-x-1 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/60">
             <button
               onClick={() => setActiveTab('planner')}
@@ -102,8 +104,8 @@ export default function Navbar({
             </button>
           </nav>
 
-          {/* Right Action Icons & FAR RIGHT END Google Login/Logout */}
-          <div class="flex items-center space-x-2">
+          {/* Right: Actions, Streak & FAR RIGHT User Profile + Logout */}
+          <div class="flex items-center space-x-1.5 sm:space-x-2">
             {/* Morning Ritual Launcher */}
             <button
               onClick={onOpenRitual}
@@ -115,15 +117,15 @@ export default function Navbar({
             </button>
 
             {/* Streak Counter */}
-            <div class="hidden sm:flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200/80 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-semibold" title="Active Streak">
+            <div class="flex items-center space-x-1 bg-emerald-50 border border-emerald-200/80 text-emerald-700 px-2 sm:px-2.5 py-1 rounded-xl text-xs font-semibold" title="Active Streak">
               <Flame class="h-3.5 w-3.5 text-emerald-600" />
-              <span>{streakCount} Day Streak</span>
+              <span class="text-[11px] font-bold">{streakCount}d</span>
             </div>
 
             {isPwaInstallable && (
               <button
                 onClick={onInstallPwa}
-                class="hidden md:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+                class="hidden md:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 px-2.5 py-1.5 rounded-xl text-xs font-semibold transition"
                 title="Install App"
               >
                 <Smartphone class="h-3.5 w-3.5" />
@@ -134,45 +136,46 @@ export default function Navbar({
             {/* Settings */}
             <button
               onClick={onOpenSettings}
-              class="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition border border-slate-200/80"
+              class="p-1.5 sm:p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition border border-slate-200/80"
               title="Settings"
             >
               <Settings class="h-4 w-4" />
             </button>
 
-            {/* FAR RIGHT END: Google Login / Logout Button */}
+            {/* FAR RIGHT: User Profile & Logout Button */}
             {user ? (
-              <div class="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 pl-2 pr-1.5 py-1 rounded-xl">
+              <div class="flex items-center space-x-1.5 bg-slate-100/90 border border-slate-200 pl-1.5 sm:pl-2 pr-1 py-1 rounded-xl shadow-2xs">
+                {/* User Avatar */}
                 <div class="flex items-center space-x-1.5">
                   {user.photoURL ? (
-                    <img src={user.photoURL} alt={user.displayName} class="h-5 w-5 rounded-full" />
+                    <img src={user.photoURL} alt={displayName} class="h-6 w-6 rounded-full border border-white shadow-2xs" />
                   ) : (
-                    <div class="h-5 w-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">
-                      {user.displayName?.[0] || 'G'}
+                    <div class="h-6 w-6 rounded-full bg-slate-900 text-white text-[11px] font-bold flex items-center justify-center">
+                      {displayName[0]?.toUpperCase() || 'U'}
                     </div>
                   )}
-                  <span class="text-xs font-bold text-slate-900 max-w-[90px] truncate hidden sm:inline">
-                    {user.displayName?.split(' ')[0] || 'Account'}
+                  <span class="text-xs font-bold text-slate-900 max-w-[85px] sm:max-w-[110px] truncate">
+                    {displayName}
                   </span>
                 </div>
 
+                {/* Logout Button */}
                 <button
                   onClick={onGoogleSignOut}
-                  class="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-200 rounded-lg text-xs font-bold flex items-center space-x-1 transition shadow-2xs"
-                  title="Sign Out of Google"
+                  class="px-2 py-1 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-200 rounded-lg text-xs font-bold flex items-center space-x-1 transition shadow-2xs"
+                  title="Log Out of Workspace"
                 >
-                  <LogOut class="h-3.5 w-3.5 text-rose-600" />
-                  <span>Logout</span>
+                  <LogOut class="h-3 w-3 text-rose-600" />
+                  <span class="hidden sm:inline">Logout</span>
                 </button>
               </div>
             ) : (
               <button
                 onClick={onGoogleSignIn}
-                class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-xs border border-slate-900 hover:scale-102"
-                title="Sign in with Google Account"
+                class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-xs"
               >
                 <LogIn class="h-3.5 w-3.5 text-emerald-400" />
-                <span>Google Login</span>
+                <span>Sign In</span>
               </button>
             )}
           </div>

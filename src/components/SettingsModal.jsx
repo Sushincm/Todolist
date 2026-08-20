@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Settings as SettingsIcon, Download, Upload, LogIn, LogOut, CheckCircle2 } from 'lucide-react';
+import { X, Settings as SettingsIcon, Download, Upload, LogIn, LogOut, CheckCircle2, User } from 'lucide-react';
 import { exportBackupJSON, importBackupJSON } from '../utils/storage';
 
 export default function SettingsModal({
@@ -13,6 +13,8 @@ export default function SettingsModal({
   onGoogleSignOut
 }) {
   if (!isOpen) return null;
+
+  const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'Authenticated User';
 
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
@@ -38,7 +40,7 @@ export default function SettingsModal({
         <div class="flex items-center justify-between border-b border-slate-100 pb-3">
           <h2 class="text-base font-bold text-slate-900 flex items-center gap-2">
             <SettingsIcon class="h-5 w-5 text-slate-700" />
-            Settings & Options
+            Settings & Workspace
           </h2>
           <button
             onClick={onClose}
@@ -48,45 +50,41 @@ export default function SettingsModal({
           </button>
         </div>
 
-        {/* 1-Click Google Account Cross-Device Sync */}
+        {/* User Account & Real-Time Cloud Sync */}
         <div class="space-y-3">
           <label class="block text-xs font-bold text-slate-900 uppercase tracking-wider">
-            Google Account Real-Time Device Sync
+            Workspace Account
           </label>
 
-          <p class="text-xs text-slate-500 leading-relaxed font-medium">
-            Sign in with your Google account on any phone, tablet, or PC to automatically sync tasks, habits, and focus minutes in real time.
-          </p>
-
           {user ? (
-            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-2">
+            <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
               <div class="flex items-center justify-between">
                 <div class="flex items-center space-x-2.5">
                   {user.photoURL ? (
-                    <img src={user.photoURL} alt={user.displayName} class="h-7 w-7 rounded-full" />
+                    <img src={user.photoURL} alt={displayName} class="h-8 w-8 rounded-full border border-white shadow-xs" />
                   ) : (
-                    <div class="h-7 w-7 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
-                      {user.displayName?.[0] || 'G'}
+                    <div class="h-8 w-8 rounded-full bg-slate-900 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                      {displayName[0]?.toUpperCase() || 'U'}
                     </div>
                   )}
                   <div>
-                    <h4 class="text-xs font-bold text-slate-900">{user.displayName || 'Google Account'}</h4>
-                    <p class="text-[11px] text-slate-500 font-medium">{user.email}</p>
+                    <h4 class="text-xs font-bold text-slate-900">{displayName}</h4>
+                    <p class="text-[11px] text-slate-600 font-medium">{user.email}</p>
                   </div>
                 </div>
 
                 <span class="flex items-center space-x-1 text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">
                   <CheckCircle2 class="h-3 w-3" />
-                  <span>Synced</span>
+                  <span>Cloud Synced</span>
                 </span>
               </div>
 
               <button
-                onClick={onGoogleSignOut}
-                class="w-full mt-2 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center space-x-1.5 transition"
+                onClick={() => { onGoogleSignOut(); onClose(); }}
+                class="w-full py-2 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-200 rounded-xl text-xs font-bold flex items-center justify-center space-x-1.5 transition shadow-2xs"
               >
-                <LogOut class="h-3.5 w-3.5" />
-                <span>Sign Out of Google</span>
+                <LogOut class="h-3.5 w-3.5 text-rose-600" />
+                <span>Log Out of Workspace</span>
               </button>
             </div>
           ) : (
@@ -95,7 +93,7 @@ export default function SettingsModal({
               class="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center space-x-2 transition shadow-xs"
             >
               <LogIn class="h-4 w-4 text-emerald-400" />
-              <span>1-Click Sign In with Google</span>
+              <span>Sign In to Account</span>
             </button>
           )}
         </div>

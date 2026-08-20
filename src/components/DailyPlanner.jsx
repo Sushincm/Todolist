@@ -3,10 +3,12 @@ import { CheckCircle2, Circle, Play, Trash2, CheckSquare, Sparkles, ChevronRight
 import confetti from 'canvas-confetti';
 import { playTaskCompleteSound } from '../utils/sound';
 
-export default function DailyPlanner({ tasks, onToggleTask, onToggleSubtask, onDeleteTask, onDecomposeTask, onStartFocusTask }) {
+export default function DailyPlanner({ tasks, onToggleTask, onToggleSubtask, onDeleteTask, onDecomposeTask, onStartFocusTask, user }) {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLowEnergyOnly, setIsLowEnergyOnly] = useState(false);
   const [expandedTaskIds, setExpandedTaskIds] = useState({});
+
+  const displayName = user?.displayName?.trim() || user?.email?.split('@')[0] || 'there';
 
   const filteredTasks = tasks.filter(t => {
     if (selectedCategory !== 'All' && t.category !== selectedCategory) return false;
@@ -41,6 +43,16 @@ export default function DailyPlanner({ tasks, onToggleTask, onToggleSubtask, onD
 
   return (
     <div class="space-y-6">
+      {/* Personalized Greeting */}
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-base md:text-lg font-bold text-slate-900">
+            Welcome back, <span class="text-emerald-700">{displayName}</span> 👋
+          </h2>
+          <p class="text-xs text-slate-500 font-medium">Here is your daily focus plan to beat procrastination today.</p>
+        </div>
+      </div>
+
       {/* 🐸 EAT THE FROG HERO BANNER */}
       {frogTask ? (
         <div class={`rounded-2xl p-5 md:p-6 transition-all border shadow-xs ${

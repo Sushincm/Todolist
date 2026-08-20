@@ -22,23 +22,67 @@ import {
 } from './utils/storage';
 
 import { decomposeTask } from './utils/decomposer';
-import { loginWithGoogle, logoutFirebase, onAuthChange, checkRedirectResult } from './firebase';
+import {
+  loginWithGoogle,
+  loginWithEmail,
+  registerWithEmail,
+  logoutFirebase,
+  onAuthChange,
+  checkRedirectResult
+} from './firebase';
 import { pushUserSyncData, startGoogleRealtimeSync, stopGoogleSync, fetchUserCloudData } from './utils/sync';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('planner');
-  const [tasks, setTasks] = useState([]);
-  const [habits, setHabits] = useState([]);
+  
+  // Persistent Auth Session Recovery (Zero logout on reload!)
+  const [googleUser, setGoogleUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('everyday_active_user_session');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [authErrorMsg, setAuthErrorMsg] = useState('');
+
+  const [tasks, setTasks] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('everyday_active_user_session');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        const cached = localStorage.getItem(`everyday_user_cloud_cache_${u.uid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.tasks) return parsed.tasks;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+
+  const [habits, setHabits] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('everyday_active_user_session');
+      if (savedUser) {
+        const u = JSON.parse(savedUser);
+        const cached = localStorage.getItem(`everyday_user_cloud_cache_${u.uid}`);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed.habits) return parsed.habits;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+
   const [settings, setSettings] = useState(getStoredSettings);
   const [streakData, setStreakData] = useState(getStreakData);
   const [selectedTaskForFocus, setSelectedTaskForFocus] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRitualOpen, setIsRitualOpen] = useState(false);
-  
-  // Google Auth User State
-  const [googleUser, setGoogleUser] = useState(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [authErrorMsg, setAuthErrorMsg] = useState('');
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
 
@@ -62,89 +106,156 @@ export default function App() {
     }
   };
 
-  // Google Auth Listener & Device Sync Fetcher
+  // Sync user data helper
+  const loadUserData = async (user) => {
+    if (!user) return;
+    try {
+      // 1. Fetch remote cloud data
+      const cloudData = await fetchUserCloudData(user.uid);
+      if (cloudData) {
+        if (cloudData.tasks && Array.isArray(cloudData.tasks)) {
+          setTasks(cloudData.tasks);
+          saveTasks(cloudData.tasks);
+        } else if (tasks.length === 0) {
+          const defaultTasks = getStoredTasks();
+          setTasks(defaultTasks);
+        }
+
+        if (cloudData.habits && Array.isArray(cloudData.habits)) {
+          setHabits(cloudData.habits);
+          saveHabits(cloudData.habits);
+        } else if (habits.length === 0) {
+          setHabits(getStoredHabits());
+        }
+
+        if (cloudData.streakData) {
+          setStreakData(cloudData.streakData);
+        }
+      } else {
+        // If first-time user on this device, load defaults
+        if (tasks.length === 0) setTasks(getStoredTasks());
+        if (habits.length === 0) setHabits(getStoredHabits());
+      }
+
+      // 2. Start Realtime Cloud Listener
+      startGoogleRealtimeSync(user.uid, (remoteData) => {
+        if (remoteData?.tasks) {
+          setTasks(remoteData.tasks);
+          saveTasks(remoteData.tasks);
+        }
+        if (remoteData?.habits) {
+          setHabits(remoteData.habits);
+          saveHabits(remoteData.habits);
+        }
+        if (remoteData?.streakData) {
+          setStreakData(remoteData.streakData);
+        }
+      });
+    } catch (e) {
+      console.warn('User cloud loading notice:', e);
+    }
+  };
+
+  // Firebase Auth State Listener & Redirect Result
   useEffect(() => {
     checkRedirectResult().catch(err => console.warn('Redirect result notice:', err));
 
     const unsubscribe = onAuthChange(async (user) => {
-      setIsAuthLoading(true);
-      setGoogleUser(user);
-
       if (user) {
+        const serializableUser = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email.split('@')[0],
+          photoURL: user.photoURL
+        };
+        setGoogleUser(serializableUser);
+        localStorage.setItem('everyday_active_user_session', JSON.stringify(serializableUser));
         setAuthErrorMsg('');
-        
-        // 1. Fetch remote user data from Firebase first to sync cross-device!
-        const cloudData = await fetchUserCloudData(user.uid);
-        if (cloudData && cloudData.tasks) {
-          setTasks(cloudData.tasks);
-          saveTasks(cloudData.tasks);
-        } else {
-          // If brand new user, load stored or initial tasks
-          const localTasks = getStoredTasks();
-          setTasks(localTasks);
-        }
-
-        if (cloudData && cloudData.habits) {
-          setHabits(cloudData.habits);
-          saveHabits(cloudData.habits);
-        } else {
-          setHabits(getStoredHabits());
-        }
-
-        if (cloudData && cloudData.streakData) {
-          setStreakData(cloudData.streakData);
-        }
-
-        // 2. Start Realtime Listener for instant cross-device updates
-        startGoogleRealtimeSync(user.uid, (remoteData) => {
-          if (remoteData.tasks) {
-            setTasks(remoteData.tasks);
-            saveTasks(remoteData.tasks);
-          }
-          if (remoteData.habits) {
-            setHabits(remoteData.habits);
-            saveHabits(remoteData.habits);
-          }
-          if (remoteData.streakData) {
-            setStreakData(remoteData.streakData);
-          }
-        });
+        await loadUserData(user);
       } else {
         stopGoogleSync();
+        // If explicitly logged out by Firebase
+        setGoogleUser(null);
+        localStorage.removeItem('everyday_active_user_session');
         setTasks([]);
         setHabits([]);
       }
       setIsAuthLoading(false);
     });
+
     return () => unsubscribe();
   }, []);
 
+  // Email & Password Registration
+  const handleEmailSignUp = async (name, email, password) => {
+    setAuthErrorMsg('');
+    const user = await registerWithEmail(name, email, password);
+    const serializableUser = {
+      uid: user.uid,
+      email: user.email,
+      displayName: name.trim() || user.email.split('@')[0],
+      photoURL: null
+    };
+    setGoogleUser(serializableUser);
+    localStorage.setItem('everyday_active_user_session', JSON.stringify(serializableUser));
+    await loadUserData(user);
+  };
+
+  // Email & Password Login
+  const handleEmailSignIn = async (email, password) => {
+    setAuthErrorMsg('');
+    const user = await loginWithEmail(email, password);
+    const serializableUser = {
+      uid: user.uid,
+      email: user.email,
+      displayName: user.displayName || user.email.split('@')[0],
+      photoURL: user.photoURL
+    };
+    setGoogleUser(serializableUser);
+    localStorage.setItem('everyday_active_user_session', JSON.stringify(serializableUser));
+    await loadUserData(user);
+  };
+
+  // Google 1-Click Sign-In
   const handleGoogleSignIn = async () => {
     setAuthErrorMsg('');
     try {
-      await loginWithGoogle();
+      const user = await loginWithGoogle();
+      if (user) {
+        const serializableUser = {
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || user.email.split('@')[0],
+          photoURL: user.photoURL
+        };
+        setGoogleUser(serializableUser);
+        localStorage.setItem('everyday_active_user_session', JSON.stringify(serializableUser));
+        await loadUserData(user);
+      }
     } catch (e) {
       console.error('Google Sign-In Error:', e);
       if (e.code === 'auth/unauthorized-domain') {
         setAuthErrorMsg(`Netlify Domain Alert: "${window.location.hostname}" is not listed in Firebase Authorized Domains yet.`);
       } else if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
-        setAuthErrorMsg('Authentication service is not enabled in your Firebase Console yet.');
+        setAuthErrorMsg('Google Sign-In is not enabled in Firebase Console yet. You can also use Email & Password Sign Up!');
       } else {
         setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check browser settings or connection.'}`);
       }
     }
   };
 
+  // Sign Out
   const handleGoogleSignOut = async () => {
     try {
       await logoutFirebase();
-      setGoogleUser(null);
-      setTasks([]);
-      setHabits([]);
-      setAuthErrorMsg('');
     } catch (e) {
-      console.error('Google Sign-Out Notice:', e);
+      console.warn('Logout notice:', e);
     }
+    setGoogleUser(null);
+    localStorage.removeItem('everyday_active_user_session');
+    setTasks([]);
+    setHabits([]);
+    setAuthErrorMsg('');
   };
 
   // Auto-push updates to Firebase when user modifies state
@@ -277,8 +388,8 @@ export default function App() {
     setStreakData(getStreakData());
   };
 
-  // Loading State
-  if (isAuthLoading) {
+  // Loading State (only if no cached session)
+  if (isAuthLoading && !googleUser) {
     return (
       <div class="min-h-screen bg-[#FAF9F6] flex flex-col justify-center items-center p-4">
         <div class="h-10 w-10 border-4 border-slate-900 border-t-transparent rounded-full animate-spin mb-3" />
@@ -287,11 +398,13 @@ export default function App() {
     );
   }
 
-  // SaaS Auth Gate: If logged out, render Auth Gate (No data shown without login!)
+  // SaaS Auth Gate: If logged out, render full Auth Gate
   if (!googleUser) {
     return (
       <SaasAuthGate
         onGoogleSignIn={handleGoogleSignIn}
+        onEmailSignIn={handleEmailSignIn}
+        onEmailSignUp={handleEmailSignUp}
         errorMsg={authErrorMsg}
       />
     );
@@ -326,6 +439,7 @@ export default function App() {
             onDeleteTask={handleDeleteTask}
             onDecomposeTask={handleDecomposeTask}
             onStartFocusTask={handleStartFocusTask}
+            user={googleUser}
           />
         )}
 
