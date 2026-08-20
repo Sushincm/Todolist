@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getDatabase, ref, set, get, onValue } from 'firebase/database';
 import {
   getAuth,
@@ -28,16 +29,17 @@ const firebaseConfig = {
 
 // Initialize Firebase App
 const app = initializeApp(firebaseConfig);
-export const database = getDatabase(app);
 export const auth = getAuth(app);
+export const firestore = getFirestore(app);
+export const database = getDatabase(app);
 
-// Ensure local persistence is set so reloads NEVER log out
+// Configure persistent authentication
 try {
   setPersistence(auth, browserLocalPersistence).catch((err) => {
     console.warn('Firebase setPersistence notice:', err);
   });
 } catch (e) {
-  console.warn('Persistence initialization notice:', e);
+  console.warn('Persistence notice:', e);
 }
 
 export const googleProvider = new GoogleAuthProvider();
@@ -58,7 +60,7 @@ export async function registerWithEmail(name, email, password) {
     });
   }
 
-  // Save initial user profile metadata to cloud
+  // Push initial profile to cloud
   await pushUserDataToFirebase(user.uid, {
     profile: {
       displayName: name?.trim() || email.split('@')[0],
@@ -79,7 +81,7 @@ export async function loginWithEmail(email, password) {
 }
 
 /**
- * Google 1-Click Sign-In
+ * Google 1-Click Sign-In (Popup with Redirect Fallback for mobile)
  */
 export async function loginWithGoogle() {
   try {
@@ -121,37 +123,70 @@ export function onAuthChange(callback) {
 }
 
 /**
- * Push user data to Firebase Realtime Database with local backup
+ * Push user data to Firestore and Realtime Database with robust error handling
  */
 export async function pushUserDataToFirebase(userId, data) {
   if (!userId) return false;
   
-  // Always update local device cache for this specific user
+  const payload = {
+    tasks: data.tasks || [],
+    habits: data.habits || [],
+    settings: data.settings || {},
+    streakData: data.streakData || {},
+    lastUpdated: Date.now(),
+  };
+
+  // 1. Update local cache
   try {
-    localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(data));
+    localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(payload));
   } catch (e) {
-    console.warn('Local user cache write error:', e);
+    console.warn('Local cache error:', e);
   }
 
+  let firestoreSuccess = false;
+  let rtdbSuccess = false;
+
+  // 2. Push to Firestore
+  try {
+    const userDoc = doc(firestore, 'users', userId);
+    await setDoc(userDoc, payload, { merge: true });
+    firestoreSuccess = true;
+  } catch (err) {
+    console.warn('Firestore sync notice:', err);
+  }
+
+  // 3. Push to Realtime Database
   try {
     const userRef = ref(database, `users/${userId}`);
-    await set(userRef, {
-      ...data,
-      lastUpdated: Date.now(),
-    });
-    return true;
+    await set(userRef, payload);
+    rtdbSuccess = true;
   } catch (err) {
-    console.warn('Firebase push sync notice (saved locally):', err);
-    return false;
+    console.warn('RTDB sync notice:', err);
   }
+
+  return firestoreSuccess || rtdbSuccess;
 }
 
 /**
- * Fetch initial user cloud data from Firebase with local cache fallback
+ * Fetch initial user cloud data (Tries Firestore, then RTDB, then Local Cache)
  */
 export async function getUserDataFromFirebase(userId) {
   if (!userId) return null;
 
+  // 1. Try Firestore first
+  try {
+    const userDoc = doc(firestore, 'users', userId);
+    const docSnap = await getDoc(userDoc);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      localStorage.setItem(`everyday_user_cloud_cache_${userId}`, JSON.stringify(data));
+      return data;
+    }
+  } catch (e) {
+    console.warn('Firestore fetch notice, checking RTDB fallback:', e);
+  }
+
+  // 2. Try Realtime Database
   try {
     const userRef = ref(database, `users/${userId}`);
     const snapshot = await get(userRef);
@@ -161,42 +196,63 @@ export async function getUserDataFromFirebase(userId) {
       return data;
     }
   } catch (e) {
-    console.warn('Remote user fetch notice, checking local cache:', e);
+    console.warn('RTDB fetch notice, checking local cache:', e);
   }
 
-  // Fallback to local cache for this user
+  // 3. Try Local User Cache
   try {
     const cached = localStorage.getItem(`everyday_user_cloud_cache_${userId}`);
     if (cached) {
       return JSON.parse(cached);
     }
   } catch (e) {
-    console.warn('Cache parsing notice:', e);
+    console.warn('Local cache read error:', e);
   }
 
   return null;
 }
 
 /**
- * Subscribe to user data updates in real time
+ * Subscribe to user data updates in real time (Firestore Snapshot + RTDB Value)
  */
 export function subscribeToUserRoom(userId, onUpdate) {
   if (!userId) return () => {};
-  const userRef = ref(database, `users/${userId}`);
 
+  let unsubFirestore = () => {};
+  let unsubRtdb = () => {};
+
+  // Subscribe to Firestore
   try {
-    const unsubscribe = onValue(userRef, (snapshot) => {
+    const userDoc = doc(firestore, 'users', userId);
+    unsubFirestore = onSnapshot(userDoc, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        onUpdate(data);
+      }
+    }, (err) => {
+      console.warn('Firestore subscription notice:', err);
+    });
+  } catch (e) {
+    console.warn('Firestore subscription init error:', e);
+  }
+
+  // Subscribe to RTDB
+  try {
+    const userRef = ref(database, `users/${userId}`);
+    unsubRtdb = onValue(userRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         onUpdate(data);
       }
-    }, (error) => {
-      console.warn('Realtime subscription notice:', error);
+    }, (err) => {
+      console.warn('RTDB subscription notice:', err);
     });
-
-    return unsubscribe;
   } catch (e) {
-    console.warn('Subscription initialization error:', e);
-    return () => {};
+    console.warn('RTDB subscription init error:', e);
   }
+
+  return () => {
+    try { unsubFirestore(); } catch(e) {}
+    try { unsubRtdb(); } catch(e) {}
+  };
 }

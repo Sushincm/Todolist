@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import QuickCapture from './components/QuickCapture';
 import DailyPlanner from './components/DailyPlanner';
@@ -47,6 +47,7 @@ export default function App() {
 
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authErrorMsg, setAuthErrorMsg] = useState('');
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   const [tasks, setTasks] = useState(() => {
     try {
@@ -56,7 +57,7 @@ export default function App() {
         const cached = localStorage.getItem(`everyday_user_cloud_cache_${u.uid}`);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed.tasks) return parsed.tasks;
+          if (parsed.tasks && Array.isArray(parsed.tasks)) return parsed.tasks;
         }
       }
     } catch (e) {}
@@ -71,7 +72,7 @@ export default function App() {
         const cached = localStorage.getItem(`everyday_user_cloud_cache_${u.uid}`);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (parsed.habits) return parsed.habits;
+          if (parsed.habits && Array.isArray(parsed.habits)) return parsed.habits;
         }
       }
     } catch (e) {}
@@ -106,11 +107,11 @@ export default function App() {
     }
   };
 
-  // Sync user data helper
+  // Sync user cloud data helper
   const loadUserData = async (user) => {
     if (!user) return;
     try {
-      // 1. Fetch remote cloud data
+      // 1. Fetch remote cloud data from Firestore / RTDB
       const cloudData = await fetchUserCloudData(user.uid);
       if (cloudData) {
         if (cloudData.tasks && Array.isArray(cloudData.tasks)) {
@@ -132,18 +133,25 @@ export default function App() {
           setStreakData(cloudData.streakData);
         }
       } else {
-        // If first-time user on this device, load defaults
-        if (tasks.length === 0) setTasks(getStoredTasks());
-        if (habits.length === 0) setHabits(getStoredHabits());
+        // First-time user on this account: seed initial tasks
+        if (tasks.length === 0) {
+          const initialTasks = getStoredTasks();
+          setTasks(initialTasks);
+        }
+        if (habits.length === 0) {
+          setHabits(getStoredHabits());
+        }
       }
 
-      // 2. Start Realtime Cloud Listener
+      setIsDataLoaded(true);
+
+      // 2. Start Realtime Cloud Listener for instant cross-device updates
       startGoogleRealtimeSync(user.uid, (remoteData) => {
-        if (remoteData?.tasks) {
+        if (remoteData?.tasks && Array.isArray(remoteData.tasks)) {
           setTasks(remoteData.tasks);
           saveTasks(remoteData.tasks);
         }
-        if (remoteData?.habits) {
+        if (remoteData?.habits && Array.isArray(remoteData.habits)) {
           setHabits(remoteData.habits);
           saveHabits(remoteData.habits);
         }
@@ -153,6 +161,7 @@ export default function App() {
       });
     } catch (e) {
       console.warn('User cloud loading notice:', e);
+      setIsDataLoaded(true);
     }
   };
 
@@ -174,11 +183,11 @@ export default function App() {
         await loadUserData(user);
       } else {
         stopGoogleSync();
-        // If explicitly logged out by Firebase
         setGoogleUser(null);
         localStorage.removeItem('everyday_active_user_session');
         setTasks([]);
         setHabits([]);
+        setIsDataLoaded(false);
       }
       setIsAuthLoading(false);
     });
@@ -255,23 +264,24 @@ export default function App() {
     localStorage.removeItem('everyday_active_user_session');
     setTasks([]);
     setHabits([]);
+    setIsDataLoaded(false);
     setAuthErrorMsg('');
   };
 
-  // Auto-push updates to Firebase when user modifies state
+  // Auto-push updates to Firebase when user modifies state (only after initial load!)
   useEffect(() => {
-    if (googleUser && tasks.length >= 0) {
+    if (googleUser && isDataLoaded) {
       saveTasks(tasks);
       pushUserSyncData({ tasks, habits, settings, streakData });
     }
-  }, [tasks]);
+  }, [tasks, isDataLoaded]);
 
   useEffect(() => {
-    if (googleUser && habits.length >= 0) {
+    if (googleUser && isDataLoaded) {
       saveHabits(habits);
       pushUserSyncData({ tasks, habits, settings, streakData });
     }
-  }, [habits]);
+  }, [habits, isDataLoaded]);
 
   useEffect(() => {
     saveSettings(settings);
