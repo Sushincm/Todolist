@@ -1,6 +1,14 @@
 import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, set, onValue } from 'firebase/database';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from 'firebase/auth';
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
+  onAuthStateChanged
+} from 'firebase/auth';
 
 // Firebase configuration for Everyday Focus Todolist
 const firebaseConfig = {
@@ -17,13 +25,40 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const database = getDatabase(app);
 export const auth = getAuth(app);
+
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account'
+});
 
 /**
- * 1-Click Google Sign-In Popup
+ * Robust Google Sign-In (Tries Popup first, falls back to Redirect for Mobile/Blocked Popups)
  */
-export function loginWithGoogle() {
-  return signInWithPopup(auth, googleProvider);
+export async function loginWithGoogle() {
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (error) {
+    console.warn('Popup login notice, trying redirect fallback:', error);
+
+    // If popup was blocked or closed by user, attempt redirect sign-in
+    if (
+      error.code === 'auth/popup-blocked' ||
+      error.code === 'auth/popup-closed-by-user' ||
+      error.code === 'auth/cancelled-popup-request'
+    ) {
+      return signInWithRedirect(auth, googleProvider);
+    }
+    
+    // Pass error back so UI can display specific help
+    throw error;
+  }
+}
+
+/**
+ * Handle Auth Redirect Result on Page Load (For Mobile Safari / Chrome)
+ */
+export function checkRedirectResult() {
+  return getRedirectResult(auth);
 }
 
 /**
