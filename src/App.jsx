@@ -37,7 +37,7 @@ export default function App() {
   // Google Auth User State
   const [googleUser, setGoogleUser] = useState(null);
   const [authErrorMsg, setAuthErrorMsg] = useState('');
-  const [showConsoleActivationLink, setShowConsoleActivationLink] = useState(false);
+  const [showNetlifyAuthorizedDomainHelp, setShowNetlifyAuthorizedDomainHelp] = useState(false);
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
 
@@ -71,7 +71,11 @@ export default function App() {
       })
       .catch((err) => {
         console.warn('Redirect result notice:', err);
-        if (err && err.code) {
+        if (err && err.code === 'auth/unauthorized-domain') {
+          const currentHostname = window.location.hostname;
+          setAuthErrorMsg(`Netlify Domain Alert: "${currentHostname}" is not authorized in Firebase Console yet.`);
+          setShowNetlifyAuthorizedDomainHelp(true);
+        } else if (err && err.code) {
           setAuthErrorMsg(`Sign-In Note: ${err.message}`);
         }
       });
@@ -80,7 +84,7 @@ export default function App() {
       setGoogleUser(user);
       if (user) {
         setAuthErrorMsg('');
-        setShowConsoleActivationLink(false);
+        setShowNetlifyAuthorizedDomainHelp(false);
         startGoogleRealtimeSync(user.uid, (remoteData) => {
           if (remoteData.tasks) {
             setTasks(remoteData.tasks);
@@ -103,19 +107,20 @@ export default function App() {
 
   const handleGoogleSignIn = async () => {
     setAuthErrorMsg('');
-    setShowConsoleActivationLink(false);
+    setShowNetlifyAuthorizedDomainHelp(false);
     try {
       await loginWithGoogle();
     } catch (e) {
       console.error('Google Sign-In Error:', e);
-      if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
+      const currentHostname = window.location.hostname;
+      if (e.code === 'auth/unauthorized-domain') {
+        setAuthErrorMsg(`Netlify Domain Alert: "${currentHostname}" is not authorized in Firebase Console yet.`);
+        setShowNetlifyAuthorizedDomainHelp(true);
+      } else if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
         setAuthErrorMsg('Authentication service is not enabled in your Firebase Console yet.');
-        setShowConsoleActivationLink(true);
-      } else if (e.code === 'auth/unauthorized-domain') {
-        setAuthErrorMsg('Current domain is not listed under Authorized Domains in Firebase Console.');
-        setShowConsoleActivationLink(true);
+        setShowNetlifyAuthorizedDomainHelp(true);
       } else {
-        setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check popup settings or internet connection.'}`);
+        setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check browser popup settings or internet connection.'}`);
       }
     }
   };
@@ -125,7 +130,7 @@ export default function App() {
       await logoutFirebase();
       setGoogleUser(null);
       setAuthErrorMsg('');
-      setShowConsoleActivationLink(false);
+      setShowNetlifyAuthorizedDomainHelp(false);
     } catch (e) {
       console.error('Google Sign-Out Notice:', e);
     }
@@ -279,19 +284,22 @@ export default function App() {
         {authErrorMsg && (
           <div class="mb-5 p-4 bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold rounded-2xl space-y-2 shadow-xs">
             <div class="flex items-center justify-between">
-              <span class="font-bold">⚠️ Firebase Auth Configuration Required</span>
+              <span class="font-bold">⚠️ Firebase Authorized Domain Setup Needed</span>
               <button onClick={() => setAuthErrorMsg('')} class="text-amber-900 font-bold">×</button>
             </div>
             <p>{authErrorMsg}</p>
-            {showConsoleActivationLink && (
-              <div class="pt-1">
+            {showNetlifyAuthorizedDomainHelp && (
+              <div class="pt-1 space-y-2">
+                <p class="text-[11px] text-amber-800">
+                  To fix Netlify login: Open Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized Domains &rarr; Add <strong>{window.location.hostname}</strong>
+                </p>
                 <a
-                  href="https://console.firebase.google.com/project/everyday-focus-todolist/authentication/providers"
+                  href="https://console.firebase.google.com/project/everyday-focus-todolist/authentication/settings"
                   target="_blank"
                   rel="noopener noreferrer"
-                  class="inline-block px-3 py-1.5 bg-amber-800 text-white font-bold text-xs rounded-xl hover:bg-amber-900 transition"
+                  class="inline-block px-3.5 py-1.5 bg-amber-800 text-white font-bold text-xs rounded-xl hover:bg-amber-900 transition"
                 >
-                  Click Here to Enable Google Auth in Firebase Console ↗
+                  Click Here to Add Netlify Domain in Firebase Console ↗
                 </a>
               </div>
             )}

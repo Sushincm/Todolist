@@ -22,8 +22,8 @@ export default function Navbar({
   return (
     <>
       <header class="sticky top-0 z-40 w-full bg-white/90 backdrop-blur-md border-b border-slate-200/80 px-4 py-3 sm:px-6 shadow-xs">
-        <div class="max-w-6xl mx-auto flex items-center justify-between">
-          {/* Logo & Date */}
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+          {/* Left Logo & Date */}
           <div class="flex items-center space-x-3">
             <div class="h-9 w-9 rounded-xl bg-slate-900 text-white flex items-center justify-center shadow-xs">
               <CheckCircle2 class="h-5 w-5 text-emerald-400" />
@@ -40,7 +40,7 @@ export default function Navbar({
           </div>
 
           {/* Desktop Nav Links */}
-          <nav class="hidden md:flex items-center space-x-1 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/60">
+          <nav class="hidden lg:flex items-center space-x-1 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/60">
             <button
               onClick={() => setActiveTab('planner')}
               class={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -102,51 +102,20 @@ export default function Navbar({
             </button>
           </nav>
 
-          {/* Right Actions */}
+          {/* Right Action Icons & FAR RIGHT END Google Login/Logout */}
           <div class="flex items-center space-x-2">
-            {/* Google User Avatar / Sign-In */}
-            {user ? (
-              <div class="flex items-center space-x-2 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-xl" title={`Signed in as ${user.email}`}>
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.displayName} class="h-5 w-5 rounded-full" />
-                ) : (
-                  <div class="h-5 w-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">
-                    {user.displayName?.[0] || 'G'}
-                  </div>
-                )}
-                <span class="text-xs font-semibold text-slate-800 hidden lg:inline max-w-[100px] truncate">
-                  {user.displayName?.split(' ')[0] || 'Google User'}
-                </span>
-                <button
-                  onClick={onGoogleSignOut}
-                  class="text-slate-400 hover:text-slate-700 ml-1"
-                  title="Sign Out of Google"
-                >
-                  <LogOut class="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={onGoogleSignIn}
-                class="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 transition shadow-xs"
-              >
-                <LogIn class="h-3.5 w-3.5 text-emerald-400" />
-                <span class="hidden sm:inline">Google Sync</span>
-              </button>
-            )}
-
             {/* Morning Ritual Launcher */}
             <button
               onClick={onOpenRitual}
-              class="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl text-xs font-semibold flex items-center space-x-1 transition"
+              class="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200/80 rounded-xl text-xs font-semibold transition"
               title="Guided Morning Planning Ritual"
             >
               <Sun class="h-3.5 w-3.5 text-amber-600" />
-              <span class="hidden sm:inline">Morning Plan</span>
+              <span>Morning Plan</span>
             </button>
 
             {/* Streak Counter */}
-            <div class="flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200/80 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-semibold" title="Active Streak">
+            <div class="hidden sm:flex items-center space-x-1.5 bg-emerald-50 border border-emerald-200/80 text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-semibold" title="Active Streak">
               <Flame class="h-3.5 w-3.5 text-emerald-600" />
               <span>{streakCount} Day Streak</span>
             </div>
@@ -154,7 +123,7 @@ export default function Navbar({
             {isPwaInstallable && (
               <button
                 onClick={onInstallPwa}
-                class="hidden sm:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
+                class="hidden md:flex items-center space-x-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-semibold transition"
                 title="Install App"
               >
                 <Smartphone class="h-3.5 w-3.5" />
@@ -162,6 +131,7 @@ export default function Navbar({
               </button>
             )}
 
+            {/* Settings */}
             <button
               onClick={onOpenSettings}
               class="p-2 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-xl transition border border-slate-200/80"
@@ -169,6 +139,42 @@ export default function Navbar({
             >
               <Settings class="h-4 w-4" />
             </button>
+
+            {/* FAR RIGHT END: Google Login / Logout Button */}
+            {user ? (
+              <div class="flex items-center space-x-2 bg-emerald-50 border border-emerald-200 pl-2 pr-1.5 py-1 rounded-xl">
+                <div class="flex items-center space-x-1.5">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt={user.displayName} class="h-5 w-5 rounded-full" />
+                  ) : (
+                    <div class="h-5 w-5 rounded-full bg-slate-900 text-white text-[10px] font-bold flex items-center justify-center">
+                      {user.displayName?.[0] || 'G'}
+                    </div>
+                  )}
+                  <span class="text-xs font-bold text-slate-900 max-w-[90px] truncate hidden sm:inline">
+                    {user.displayName?.split(' ')[0] || 'Account'}
+                  </span>
+                </div>
+
+                <button
+                  onClick={onGoogleSignOut}
+                  class="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-700 hover:text-rose-800 border border-slate-200 rounded-lg text-xs font-bold flex items-center space-x-1 transition shadow-2xs"
+                  title="Sign Out of Google"
+                >
+                  <LogOut class="h-3.5 w-3.5 text-rose-600" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={onGoogleSignIn}
+                class="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl flex items-center space-x-1.5 transition shadow-xs border border-slate-900 hover:scale-102"
+                title="Sign in with Google Account"
+              >
+                <LogIn class="h-3.5 w-3.5 text-emerald-400" />
+                <span>Google Login</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
