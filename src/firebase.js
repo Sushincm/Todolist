@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue } from 'firebase/database';
+import { getDatabase, ref, set, get, onValue } from 'firebase/database';
 import {
   getAuth,
   GoogleAuthProvider,
@@ -32,11 +32,10 @@ googleProvider.setCustomParameters({
 });
 
 /**
- * Direct Google Redirect Sign-In (Bypasses popup blockers completely)
+ * Direct Google Redirect Sign-In
  */
 export async function loginWithGoogle() {
   try {
-    // Try redirect sign in directly (works on all browsers & mobile without pop-up blockers)
     return await signInWithRedirect(auth, googleProvider);
   } catch (error) {
     console.warn('Redirect login error, trying popup fallback:', error);
@@ -66,7 +65,7 @@ export function onAuthChange(callback) {
 }
 
 /**
- * Sync user data to Firebase Realtime Database using user.uid
+ * Push user data to Firebase Realtime Database
  */
 export function pushUserDataToFirebase(userId, data) {
   if (!userId) return Promise.resolve(false);
@@ -79,6 +78,24 @@ export function pushUserDataToFirebase(userId, data) {
     console.warn('Firebase sync push notice:', err);
     return false;
   });
+}
+
+/**
+ * Fetch initial user cloud data from Firebase
+ */
+export async function getUserDataFromFirebase(userId) {
+  if (!userId) return null;
+  const userRef = ref(database, `users/${userId}`);
+  try {
+    const snapshot = await get(userRef);
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+    return null;
+  } catch (e) {
+    console.warn('Error fetching user cloud data:', e);
+    return null;
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 // Firebase Google Account Sync Manager
 
-import { pushUserDataToFirebase, subscribeToUserRoom } from '../firebase';
+import { pushUserDataToFirebase, subscribeToUserRoom, getUserDataFromFirebase } from '../firebase';
 
 let activeUserId = null;
 let unsubscribeListener = null;
@@ -15,6 +15,14 @@ export function setActiveUser(userId) {
 
 export function getActiveUserId() {
   return activeUserId;
+}
+
+/**
+ * Fetch cloud data once upon login for immediate cross-device population
+ */
+export async function fetchUserCloudData(userId) {
+  if (!userId) return null;
+  return getUserDataFromFirebase(userId);
 }
 
 /**

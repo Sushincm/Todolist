@@ -8,6 +8,7 @@ import HabitsTracker from './components/HabitsTracker';
 import AnalyticsView from './components/AnalyticsView';
 import SettingsModal from './components/SettingsModal';
 import DailyRitualModal from './components/DailyRitualModal';
+import SaasAuthGate from './components/SaasAuthGate';
 
 import {
   getStoredTasks,
@@ -22,12 +23,12 @@ import {
 
 import { decomposeTask } from './utils/decomposer';
 import { loginWithGoogle, logoutFirebase, onAuthChange, checkRedirectResult } from './firebase';
-import { pushUserSyncData, startGoogleRealtimeSync, stopGoogleSync } from './utils/sync';
+import { pushUserSyncData, startGoogleRealtimeSync, stopGoogleSync, fetchUserCloudData } from './utils/sync';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('planner');
-  const [tasks, setTasks] = useState(getStoredTasks);
-  const [habits, setHabits] = useState(getStoredHabits);
+  const [tasks, setTasks] = useState([]);
+  const [habits, setHabits] = useState([]);
   const [settings, setSettings] = useState(getStoredSettings);
   const [streakData, setStreakData] = useState(getStreakData);
   const [selectedTaskForFocus, setSelectedTaskForFocus] = useState(null);
@@ -36,8 +37,8 @@ export default function App() {
   
   // Google Auth User State
   const [googleUser, setGoogleUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authErrorMsg, setAuthErrorMsg] = useState('');
-  const [showNetlifyAuthorizedDomainHelp, setShowNetlifyAuthorizedDomainHelp] = useState(false);
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
 
@@ -61,30 +62,40 @@ export default function App() {
     }
   };
 
-  // Check Redirect Result & Auth Listener
+  // Google Auth Listener & Device Sync Fetcher
   useEffect(() => {
-    checkRedirectResult()
-      .then((result) => {
-        if (result && result.user) {
-          setGoogleUser(result.user);
-        }
-      })
-      .catch((err) => {
-        console.warn('Redirect result notice:', err);
-        if (err && err.code === 'auth/unauthorized-domain') {
-          const currentHostname = window.location.hostname;
-          setAuthErrorMsg(`Netlify Domain Alert: "${currentHostname}" is not authorized in Firebase Console yet.`);
-          setShowNetlifyAuthorizedDomainHelp(true);
-        } else if (err && err.code) {
-          setAuthErrorMsg(`Sign-In Note: ${err.message}`);
-        }
-      });
+    checkRedirectResult().catch(err => console.warn('Redirect result notice:', err));
 
-    const unsubscribe = onAuthChange((user) => {
+    const unsubscribe = onAuthChange(async (user) => {
+      setIsAuthLoading(true);
       setGoogleUser(user);
+
       if (user) {
         setAuthErrorMsg('');
-        setShowNetlifyAuthorizedDomainHelp(false);
+        
+        // 1. Fetch remote user data from Firebase first to sync cross-device!
+        const cloudData = await fetchUserCloudData(user.uid);
+        if (cloudData && cloudData.tasks) {
+          setTasks(cloudData.tasks);
+          saveTasks(cloudData.tasks);
+        } else {
+          // If brand new user, load stored or initial tasks
+          const localTasks = getStoredTasks();
+          setTasks(localTasks);
+        }
+
+        if (cloudData && cloudData.habits) {
+          setHabits(cloudData.habits);
+          saveHabits(cloudData.habits);
+        } else {
+          setHabits(getStoredHabits());
+        }
+
+        if (cloudData && cloudData.streakData) {
+          setStreakData(cloudData.streakData);
+        }
+
+        // 2. Start Realtime Listener for instant cross-device updates
         startGoogleRealtimeSync(user.uid, (remoteData) => {
           if (remoteData.tasks) {
             setTasks(remoteData.tasks);
@@ -100,27 +111,26 @@ export default function App() {
         });
       } else {
         stopGoogleSync();
+        setTasks([]);
+        setHabits([]);
       }
+      setIsAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
   const handleGoogleSignIn = async () => {
     setAuthErrorMsg('');
-    setShowNetlifyAuthorizedDomainHelp(false);
     try {
       await loginWithGoogle();
     } catch (e) {
       console.error('Google Sign-In Error:', e);
-      const currentHostname = window.location.hostname;
       if (e.code === 'auth/unauthorized-domain') {
-        setAuthErrorMsg(`Netlify Domain Alert: "${currentHostname}" is not authorized in Firebase Console yet.`);
-        setShowNetlifyAuthorizedDomainHelp(true);
+        setAuthErrorMsg(`Netlify Domain Alert: "${window.location.hostname}" is not listed in Firebase Authorized Domains yet.`);
       } else if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
         setAuthErrorMsg('Authentication service is not enabled in your Firebase Console yet.');
-        setShowNetlifyAuthorizedDomainHelp(true);
       } else {
-        setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check browser popup settings or internet connection.'}`);
+        setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check browser settings or connection.'}`);
       }
     }
   };
@@ -129,23 +139,25 @@ export default function App() {
     try {
       await logoutFirebase();
       setGoogleUser(null);
+      setTasks([]);
+      setHabits([]);
       setAuthErrorMsg('');
-      setShowNetlifyAuthorizedDomainHelp(false);
     } catch (e) {
       console.error('Google Sign-Out Notice:', e);
     }
   };
 
+  // Auto-push updates to Firebase when user modifies state
   useEffect(() => {
-    saveTasks(tasks);
-    if (googleUser) {
+    if (googleUser && tasks.length >= 0) {
+      saveTasks(tasks);
       pushUserSyncData({ tasks, habits, settings, streakData });
     }
   }, [tasks]);
 
   useEffect(() => {
-    saveHabits(habits);
-    if (googleUser) {
+    if (googleUser && habits.length >= 0) {
+      saveHabits(habits);
       pushUserSyncData({ tasks, habits, settings, streakData });
     }
   }, [habits]);
@@ -265,6 +277,27 @@ export default function App() {
     setStreakData(getStreakData());
   };
 
+  // Loading State
+  if (isAuthLoading) {
+    return (
+      <div class="min-h-screen bg-[#FAF9F6] flex flex-col justify-center items-center p-4">
+        <div class="h-10 w-10 border-4 border-slate-900 border-t-transparent rounded-full animate-spin mb-3" />
+        <p class="text-xs font-bold text-slate-700">Loading Everyday Focus Workspace...</p>
+      </div>
+    );
+  }
+
+  // SaaS Auth Gate: If logged out, render Auth Gate (No data shown without login!)
+  if (!googleUser) {
+    return (
+      <SaasAuthGate
+        onGoogleSignIn={handleGoogleSignIn}
+        errorMsg={authErrorMsg}
+      />
+    );
+  }
+
+  // SaaS Authenticated Dashboard Workspace
   return (
     <div class="min-h-screen pb-20 md:pb-12">
       <Navbar
@@ -281,31 +314,6 @@ export default function App() {
       />
 
       <main class="max-w-4xl mx-auto px-4 py-6 md:px-6">
-        {authErrorMsg && (
-          <div class="mb-5 p-4 bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold rounded-2xl space-y-2 shadow-xs">
-            <div class="flex items-center justify-between">
-              <span class="font-bold">⚠️ Firebase Authorized Domain Setup Needed</span>
-              <button onClick={() => setAuthErrorMsg('')} class="text-amber-900 font-bold">×</button>
-            </div>
-            <p>{authErrorMsg}</p>
-            {showNetlifyAuthorizedDomainHelp && (
-              <div class="pt-1 space-y-2">
-                <p class="text-[11px] text-amber-800">
-                  To fix Netlify login: Open Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized Domains &rarr; Add <strong>{window.location.hostname}</strong>
-                </p>
-                <a
-                  href="https://console.firebase.google.com/project/everyday-focus-todolist/authentication/settings"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="inline-block px-3.5 py-1.5 bg-amber-800 text-white font-bold text-xs rounded-xl hover:bg-amber-900 transition"
-                >
-                  Click Here to Add Netlify Domain in Firebase Console ↗
-                </a>
-              </div>
-            )}
-          </div>
-        )}
-
         {(activeTab === 'planner' || activeTab === 'matrix') && (
           <QuickCapture onAddTask={handleAddTask} />
         )}
