@@ -37,6 +37,7 @@ export default function App() {
   // Google Auth User State
   const [googleUser, setGoogleUser] = useState(null);
   const [authErrorMsg, setAuthErrorMsg] = useState('');
+  const [showConsoleActivationLink, setShowConsoleActivationLink] = useState(false);
 
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState(null);
 
@@ -60,7 +61,7 @@ export default function App() {
     }
   };
 
-  // Google Auth State Listener & Redirect Result Handler
+  // Google Auth Listener & Redirect Result
   useEffect(() => {
     checkRedirectResult().catch(err => console.warn('Redirect result check:', err));
 
@@ -68,6 +69,7 @@ export default function App() {
       setGoogleUser(user);
       if (user) {
         setAuthErrorMsg('');
+        setShowConsoleActivationLink(false);
         startGoogleRealtimeSync(user.uid, (remoteData) => {
           if (remoteData.tasks) {
             setTasks(remoteData.tasks);
@@ -90,16 +92,19 @@ export default function App() {
 
   const handleGoogleSignIn = async () => {
     setAuthErrorMsg('');
+    setShowConsoleActivationLink(false);
     try {
       await loginWithGoogle();
     } catch (e) {
       console.error('Google Sign-In Error:', e);
-      if (e.code === 'auth/operation-not-allowed') {
-        setAuthErrorMsg('⚠️ Google Auth is disabled in Firebase Console. Enable "Google" under Firebase -> Authentication -> Sign-in method.');
+      if (e.code === 'auth/configuration-not-found' || e.code === 'auth/operation-not-allowed') {
+        setAuthErrorMsg('Authentication service is not enabled in your Firebase Console yet.');
+        setShowConsoleActivationLink(true);
       } else if (e.code === 'auth/unauthorized-domain') {
-        setAuthErrorMsg('⚠️ Current domain is not authorized in Firebase. Add localhost to Firebase -> Authentication -> Settings -> Authorized domains.');
+        setAuthErrorMsg('Current domain is not listed under Authorized Domains in Firebase Console.');
+        setShowConsoleActivationLink(true);
       } else {
-        setAuthErrorMsg(`⚠️ Sign-In Note: ${e.message || 'Please check popup settings or internet connection.'}`);
+        setAuthErrorMsg(`Sign-In note: ${e.message || 'Please check popup settings or internet connection.'}`);
       }
     }
   };
@@ -109,12 +114,12 @@ export default function App() {
       await logoutFirebase();
       setGoogleUser(null);
       setAuthErrorMsg('');
+      setShowConsoleActivationLink(false);
     } catch (e) {
       console.error('Google Sign-Out Notice:', e);
     }
   };
 
-  // Auto-push updates to Firebase when user is logged in
   useEffect(() => {
     saveTasks(tasks);
     if (googleUser) {
@@ -134,7 +139,7 @@ export default function App() {
     document.body.className = 'bg-[#FAF9F6] text-slate-900 min-h-screen antialiased';
   }, [settings]);
 
-  // Global Keyboard Shortcuts (Ctrl+K or Cmd+K)
+  // Global Keyboard Shortcuts (Ctrl+K)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -261,9 +266,24 @@ export default function App() {
 
       <main class="max-w-4xl mx-auto px-4 py-6 md:px-6">
         {authErrorMsg && (
-          <div class="mb-4 p-3 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-xl flex items-center justify-between">
-            <span>{authErrorMsg}</span>
-            <button onClick={() => setAuthErrorMsg('')} class="text-amber-800 font-bold ml-2">×</button>
+          <div class="mb-5 p-4 bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold rounded-2xl space-y-2 shadow-xs">
+            <div class="flex items-center justify-between">
+              <span class="font-bold">⚠️ Firebase Auth Configuration Required</span>
+              <button onClick={() => setAuthErrorMsg('')} class="text-amber-900 font-bold">×</button>
+            </div>
+            <p>{authErrorMsg}</p>
+            {showConsoleActivationLink && (
+              <div class="pt-1">
+                <a
+                  href="https://console.firebase.google.com/project/everyday-focus-todolist/authentication/providers"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="inline-block px-3 py-1.5 bg-amber-800 text-white font-bold text-xs rounded-xl hover:bg-amber-900 transition"
+                >
+                  Click Here to Enable Google Auth in Firebase Console ↗
+                </a>
+              </div>
+            )}
           </div>
         )}
 

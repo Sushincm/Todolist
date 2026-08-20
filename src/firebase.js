@@ -10,7 +10,7 @@ import {
   onAuthStateChanged
 } from 'firebase/auth';
 
-// Firebase configuration for Everyday Focus Todolist
+// Official Firebase configuration for everyday-focus-todolist
 const firebaseConfig = {
   apiKey: "AIzaSyBGIk2m30gLI6ZC6Gw6qv6tS65xnXD7IaU",
   authDomain: "everyday-focus-todolist.firebaseapp.com",
@@ -32,15 +32,14 @@ googleProvider.setCustomParameters({
 });
 
 /**
- * Robust Google Sign-In (Tries Popup first, falls back to Redirect for Mobile/Blocked Popups)
+ * Robust Google Sign-In with Popup & Redirect Fallback
  */
 export async function loginWithGoogle() {
   try {
     return await signInWithPopup(auth, googleProvider);
   } catch (error) {
-    console.warn('Popup login notice, trying redirect fallback:', error);
+    console.warn('Google Auth notice:', error);
 
-    // If popup was blocked or closed by user, attempt redirect sign-in
     if (
       error.code === 'auth/popup-blocked' ||
       error.code === 'auth/popup-closed-by-user' ||
@@ -49,13 +48,12 @@ export async function loginWithGoogle() {
       return signInWithRedirect(auth, googleProvider);
     }
     
-    // Pass error back so UI can display specific help
     throw error;
   }
 }
 
 /**
- * Handle Auth Redirect Result on Page Load (For Mobile Safari / Chrome)
+ * Handle Auth Redirect Result on Page Load
  */
 export function checkRedirectResult() {
   return getRedirectResult(auth);
