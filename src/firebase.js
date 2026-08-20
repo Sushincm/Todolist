@@ -3,8 +3,8 @@ import { getDatabase, ref, set, onValue } from 'firebase/database';
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithPopup,
   signInWithRedirect,
+  signInWithPopup,
   getRedirectResult,
   signOut,
   onAuthStateChanged
@@ -32,23 +32,15 @@ googleProvider.setCustomParameters({
 });
 
 /**
- * Robust Google Sign-In with Popup & Redirect Fallback
+ * Direct Google Redirect Sign-In (Bypasses popup blockers completely)
  */
 export async function loginWithGoogle() {
   try {
-    return await signInWithPopup(auth, googleProvider);
+    // Try redirect sign in directly (works on all browsers & mobile without pop-up blockers)
+    return await signInWithRedirect(auth, googleProvider);
   } catch (error) {
-    console.warn('Google Auth notice:', error);
-
-    if (
-      error.code === 'auth/popup-blocked' ||
-      error.code === 'auth/popup-closed-by-user' ||
-      error.code === 'auth/cancelled-popup-request'
-    ) {
-      return signInWithRedirect(auth, googleProvider);
-    }
-    
-    throw error;
+    console.warn('Redirect login error, trying popup fallback:', error);
+    return signInWithPopup(auth, googleProvider);
   }
 }
 

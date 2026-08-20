@@ -61,9 +61,20 @@ export default function App() {
     }
   };
 
-  // Google Auth Listener & Redirect Result
+  // Check Redirect Result & Auth Listener
   useEffect(() => {
-    checkRedirectResult().catch(err => console.warn('Redirect result check:', err));
+    checkRedirectResult()
+      .then((result) => {
+        if (result && result.user) {
+          setGoogleUser(result.user);
+        }
+      })
+      .catch((err) => {
+        console.warn('Redirect result notice:', err);
+        if (err && err.code) {
+          setAuthErrorMsg(`Sign-In Note: ${err.message}`);
+        }
+      });
 
     const unsubscribe = onAuthChange((user) => {
       setGoogleUser(user);
